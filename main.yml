@@ -1,0 +1,84 @@
+---
+# tasks file for abyres.jdv
+- name: install wget
+  yum: name=wget state=latest
+
+- name: install unarchiver
+  yum: name=bzip2,tar,unzip state=latest
+
+- name: install java JDK
+  yum: name=java-1.7.0-openjdk-devel state=latest
+
+- name: config java
+  alternatives: name=java path=/usr/lib/jvm/java-1.7.0-openjdk-1.7.0.101-2.6.6.1.el7_2.x86_64/jre/bin/java
+
+- name: config javac
+  alternatives: name=javac path=/usr/lib/jvm/java-1.7.0-openjdk-1.7.0.101-2.6.6.1.el7_2.x86_64/bin/javac
+
+- name: remove existing maven
+  shell: rm -rf apache-maven*
+
+- name: unzip the content of apache maven
+  unarchive: src={{ maven_339_zip }} dest=/opt/ creates=/opt/apache-maven-3.3.9/
+
+- name: move the content of maven to opt/
+  shell: mv apache-maven-3.3.9 /opt/
+
+- name: export the path
+  template: src=.bash_profile.sample dest=~/.bash_profile mode=600
+
+- name: sourcing the bash profile
+  shell: source ~/.bash_profile
+
+- name: Copy jboss-eap
+  copy: src=roles/abyres.jdv/templates/jboss-eap-6.4.0.zip dest=/root/
+
+- name: unzip jbosseap
+  shell: unzip jboss-eap-6.4.0.zip && mv jboss-eap-6.4 /opt/
+
+- name: Copy jboss-dv
+  copy: src=roles/abyres.jdv/templates/jboss-dv-installer-6.2.0.redhat-3.jar dest=/opt/
+
+- name: copy jboss DV Auto install template and password file for auto install
+  copy: src=roles/abyres.jdv/templates/auto.xml dest=/opt/auto.xml
+
+- name: copy password file for auto install
+  copy: src=roles/abyres.jdv/templates/paswd.txt dest=/opt/paswd.txt
+
+- name: install JDV
+  shell: cd /opt/ && (java -jar jboss-dv-installer-6.2.0.redhat-3.jar /opt/auto.xml < /opt/paswd.txt)
+  ignore_errors: yes
+
+- name: Copy webUI
+  copy: src=roles/abyres.jdv/templates/PREVIEW-DataVirtWebUI-03Apr2015.war dest=/opt/jboss-eap-6.4/standalone/deployments/
+
+- name: mkdir for postgresql
+  shell: cd /opt/jboss-eap-6.4/modules && mkdir -p org/postgresql/main
+
+- name: copy and deploy jdbc4 jar
+  copy: src = {{ postgres_jdbc4_jar }} dest=/opt/jboss-eap-6.4/modules/org/postgresql/main
+
+- name: edit module.xml 
+  template: src=module.xml.sample dest=/opt/jboss-eap-6.4/modules/org/postgresql/main/module.xml mode=600
+
+- name: edit jdv service
+  template: src=jdv.service.sample dest=/etc/systemd/system/jdv.service mode=600
+
+- name: start the service
+  shell: systemctl start jdv
+
+- name: copy the jboss-client config
+  copy: src=roles/abyres.jdv/templates/jboss-cli.txt dest=/opt/jboss-cli.txt
+
+- name: stop firewalld service
+  shell: service firewalld stop
+
+- name: copy ssh public key
+  authorized_key: user=root key="{{ item }}"
+  with_file:
+    - "{{ public_key }}"
+
+- name: wait for a while
+  wait_for: port=9990 delay=60
+- name: start jboss client
+  shell: cd /opt/jboss-eap-6.4/bin/ && (./jboss-cli.sh --connect < /opt/jboss-cli.txt)

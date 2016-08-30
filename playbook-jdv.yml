@@ -1,0 +1,8 @@
+- hosts: jdv
+  remote_user: root
+  roles:
+      - { role: "abyres.ovirt" }
+      - { role: "abyres.jdv",
+	  public_key: "keys/id_rsa.pub",
+	  maven_339_zip: "files/apache-maven-3.3.9-bin.zip",
+	  postgres_jdbc4_jar: "files/postgresql-9.2-1004.jdbc4.jar" }
